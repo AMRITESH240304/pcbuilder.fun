@@ -271,7 +271,7 @@ const IndexResults = memo(function IndexResults({
       <div className="flex items-center gap-2 px-4 py-2 sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
         <span className="text-xl">{indexConfig.icon}</span>
         <h3 className="text-sm font-semibold text-foreground">{indexConfig.label}</h3>
-        <span className="text-xs text-muted-foreground">({items.length})</span>
+        <span className="text-xs text-muted-foreground">({items.length} results)</span>
       </div>
       <div className="space-y-1 px-2">
         {items.map((hit: any, idx: number) => {
@@ -284,24 +284,51 @@ const IndexResults = memo(function IndexResults({
               onClick={() => onSelect?.(hit, indexConfig.name)}
               onMouseEnter={() => onHoverIndex(globalIndex)}
               className={cn(
-                "w-full text-left p-3 rounded-lg transition-all cursor-pointer flex items-center gap-3",
+                "w-full text-left p-3 rounded-lg transition-all cursor-pointer flex items-start gap-3 group",
                 isSelected
-                  ? "bg-primary/10 border border-primary/30"
+                  ? "bg-primary/10 border border-primary/30 ring-1 ring-primary/20"
                   : "hover:bg-muted border border-transparent"
               )}
             >
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-foreground truncate [&_mark]:bg-transparent [&_mark]:text-primary [&_mark]:underline [&_mark]:underline-offset-2">
+                <p className="font-medium text-foreground truncate [&_mark]:bg-transparent [&_mark]:text-primary [&_mark]:font-semibold">
                   <Highlight attribute="name" hit={hit} />
                 </p>
-                {hit.price && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    ${hit.price}
-                  </p>
-                )}
+                <div className="flex flex-wrap gap-2 mt-2 text-xs text-muted-foreground">
+                  {hit.price && (
+                    <span className="bg-muted px-2 py-0.5 rounded">
+                      ${typeof hit.price === 'number' ? hit.price.toFixed(2) : hit.price}
+                    </span>
+                  )}
+                  {hit.manufacturer && (
+                    <span className="bg-muted px-2 py-0.5 rounded">
+                      {hit.manufacturer}
+                    </span>
+                  )}
+                  {hit.socket && (
+                    <span className="bg-muted px-2 py-0.5 rounded">
+                      Socket: {hit.socket}
+                    </span>
+                  )}
+                  {hit.form_factor && (
+                    <span className="bg-muted px-2 py-0.5 rounded">
+                      {hit.form_factor}
+                    </span>
+                  )}
+                  {hit.memory_type && (
+                    <span className="bg-muted px-2 py-0.5 rounded">
+                      {hit.memory_type}
+                    </span>
+                  )}
+                  {hit.wattage && (
+                    <span className="bg-muted px-2 py-0.5 rounded">
+                      {hit.wattage}W
+                    </span>
+                  )}
+                </div>
               </div>
               {isSelected && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0 mt-1">
                   <CornerDownLeft size={14} /> select
                 </span>
               )}
@@ -366,12 +393,20 @@ const SearchInput = memo(function SearchInput({
   );
 });
 
+// Hook to collect all hits from all indices for keyboard navigation
+function useAllHits() {
+  const [allHits, setAllHits] = useState<Array<{ hit: any; indexName: string; indexConfig: typeof PC_COMPONENT_INDEXES[number] }>>([]);
+  
+  return { allHits, setAllHits };
+}
+
 // Multi-Index Results Panel
 interface MultiIndexResultsProps {
   config: MultiIndexSearchConfig;
   onSelect?: (hit: any, indexName: string) => void;
   activeIndex: number;
   onHoverIndex: (index: number) => void;
+  onGetAllHits?: (hits: Array<{ hit: any; indexName: string }>) => void;
 }
 
 const MultiIndexResults = memo(function MultiIndexResults({
@@ -379,9 +414,27 @@ const MultiIndexResults = memo(function MultiIndexResults({
   onSelect,
   activeIndex,
   onHoverIndex,
+  onGetAllHits,
 }: MultiIndexResultsProps) {
   const { query } = useSearchBox();
+  const [hitsByIndex, setHitsByIndex] = useState<Record<string, any[]>>({});
   let currentStartIndex = 0;
+
+  // Notify parent about all hits for keyboard navigation
+  useEffect(() => {
+    const allHits: Array<{ hit: any; indexName: string }> = [];
+    PC_COMPONENT_INDEXES.forEach((indexConfig) => {
+      const indexHits = hitsByIndex[indexConfig.name] || [];
+      indexHits.forEach((hit) => {
+        allHits.push({ hit, indexName: indexConfig.name });
+      });
+    });
+    onGetAllHits?.(allHits);
+  }, [hitsByIndex, onGetAllHits]);
+
+  const handleIndexHitsUpdate = useCallback((indexName: string, hits: any[]) => {
+    setHitsByIndex((prev) => ({ ...prev, [indexName]: hits }));
+  }, []);
 
   if (!query) {
     return (
@@ -393,10 +446,16 @@ const MultiIndexResults = memo(function MultiIndexResults({
     );
   }
 
+  // Check if we have any results at all
+  const totalHits = Object.values(hitsByIndex).reduce((sum, hits) => sum + hits.length, 0);
+  const hasResults = totalHits > 0;
+
   return (
     <div className="overflow-y-auto max-h-[60vh] bg-muted/30">
       {PC_COMPONENT_INDEXES.map((indexConfig) => {
         const startIndex = currentStartIndex;
+        const indexHits = hitsByIndex[indexConfig.name] || [];
+        currentStartIndex += indexHits.length;
         
         return (
           <Index key={indexConfig.name} indexName={indexConfig.name}>
@@ -407,13 +466,18 @@ const MultiIndexResults = memo(function MultiIndexResults({
               activeIndex={activeIndex}
               startIndex={startIndex}
               onHoverIndex={onHoverIndex}
-              onUpdateCount={(count) => {
-                currentStartIndex += count;
-              }}
+              onHitsUpdate={handleIndexHitsUpdate}
             />
           </Index>
         );
       })}
+      {query && !hasResults && (
+        <div className="flex flex-col items-center justify-center h-[50vh] text-muted-foreground">
+          <SearchIcon size={48} className="mb-4 opacity-50" />
+          <p className="text-lg">No components found</p>
+          <p className="text-sm mt-2">Try a different search term</p>
+        </div>
+      )}
     </div>
   );
 });
@@ -425,7 +489,7 @@ interface IndexResultsWrapperProps {
   activeIndex: number;
   startIndex: number;
   onHoverIndex: (globalIndex: number) => void;
-  onUpdateCount: (count: number) => void;
+  onHitsUpdate: (indexName: string, hits: any[]) => void;
 }
 
 const IndexResultsWrapper = memo(function IndexResultsWrapper({
@@ -434,7 +498,15 @@ const IndexResultsWrapper = memo(function IndexResultsWrapper({
   activeIndex,
   startIndex,
   onHoverIndex,
+  onHitsUpdate,
 }: IndexResultsWrapperProps) {
+  const { items } = useHits();
+  
+  // Notify parent about hits from this index
+  useEffect(() => {
+    onHitsUpdate(indexConfig.name, items);
+  }, [items, indexConfig.name, onHitsUpdate]);
+
   return (
     <IndexResults
       indexConfig={indexConfig}
@@ -496,6 +568,7 @@ interface SearchModalContentProps {
 function SearchModalContent({ config, onClose }: SearchModalContentProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [allHits, setAllHits] = useState<Array<{ hit: any; indexName: string }>>([]);
   const { query } = useSearchBox();
 
   // Reset active index when query changes
@@ -507,6 +580,46 @@ function SearchModalContent({ config, onClose }: SearchModalContentProps) {
     setActiveIndex(index);
   }, []);
 
+  const handleGetAllHits = useCallback((hits: Array<{ hit: any; indexName: string }>) => {
+    setAllHits(hits);
+  }, []);
+
+  const handleSelect = useCallback((hit: any, indexName: string) => {
+    config.onSelectComponent?.(hit, indexName);
+    // Close modal after selection
+    setTimeout(() => onClose(), 100);
+  }, [config, onClose]);
+
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveIndex((prev) => {
+          const maxIndex = allHits.length - 1;
+          if (maxIndex < 0) return -1;
+          return prev < maxIndex ? prev + 1 : 0;
+        });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveIndex((prev) => {
+          const maxIndex = allHits.length - 1;
+          if (maxIndex < 0) return -1;
+          return prev > 0 ? prev - 1 : maxIndex;
+        });
+      } else if (e.key === 'Enter' && activeIndex >= 0 && activeIndex < allHits.length) {
+        e.preventDefault();
+        const selected = allHits[activeIndex];
+        if (selected) {
+          handleSelect(selected.hit, selected.indexName);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [activeIndex, allHits, handleSelect]);
+
   return (
     <div className="flex flex-col h-full">
       <SearchInput
@@ -516,9 +629,10 @@ function SearchModalContent({ config, onClose }: SearchModalContentProps) {
       />
       <MultiIndexResults
         config={config}
-        onSelect={config.onSelectComponent}
+        onSelect={handleSelect}
         activeIndex={activeIndex}
         onHoverIndex={handleHoverIndex}
+        onGetAllHits={handleGetAllHits}
       />
       <Footer />
     </div>
