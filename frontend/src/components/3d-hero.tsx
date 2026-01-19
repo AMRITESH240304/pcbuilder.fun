@@ -195,7 +195,7 @@ function Loader() {
 }
 
 // Main 3D Hero Component
-export default function Hero3D() {
+export default function Hero3D({ onStartBuilding }: { onStartBuilding?: () => void }) {
   return (
     <div className="relative w-full h-screen overflow-hidden bg-gradient-to-b from-background via-background/95 to-background">
       {/* 3D Canvas */}
@@ -256,8 +256,12 @@ export default function Hero3D() {
           >
             <button
               onClick={() => {
-                const searchSection = document.getElementById('search-section');
-                searchSection?.scrollIntoView({ behavior: 'smooth' });
+                if (onStartBuilding) {
+                  onStartBuilding();
+                } else {
+                  const searchSection = document.getElementById('search-section');
+                  searchSection?.scrollIntoView({ behavior: 'smooth' });
+                }
               }}
               className="px-8 py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-lg hover:bg-primary/90 transition-all hover:scale-105 shadow-lg hover:shadow-primary/50"
             >

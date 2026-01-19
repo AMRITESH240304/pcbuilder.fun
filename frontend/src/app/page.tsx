@@ -3,10 +3,12 @@
 import MultiIndexSearch, { PC_COMPONENT_INDEXES } from "@/components/multi-index-search";
 import Hero3D from "@/components/3d-hero";
 import FeaturesSection from "@/components/features-section";
+import PC3DBuilder from "@/components/3d-pc-builder";
 import { useState } from "react";
 
 export default function Home() {
   const [selectedComponents, setSelectedComponents] = useState<Record<string, any>>({});
+  const [showBuilder, setShowBuilder] = useState(false);
 
   const handleSelectComponent = (component: any, indexName: string) => {
     console.log("Selected component:", component, "from index:", indexName);
@@ -21,10 +23,29 @@ export default function Home() {
     console.log(`✅ Added ${component.name} to your build`);
   };
 
+  const handleStartBuilding = () => {
+    setShowBuilder(true);
+  };
+
+  const handleCloseBuilder = () => {
+    setShowBuilder(false);
+  };
+
+  // Show 3D Builder if active
+  if (showBuilder) {
+    return (
+      <PC3DBuilder
+        selectedComponents={selectedComponents}
+        onSelectComponent={handleSelectComponent}
+        onClose={handleCloseBuilder}
+      />
+    );
+  }
+
   return (
     <>
       {/* 3D Hero Section */}
-      <Hero3D />
+      <Hero3D onStartBuilding={handleStartBuilding} />
 
       {/* Features Section */}
       <FeaturesSection />
